@@ -7,7 +7,7 @@
 #include "gpu/gpu_vm.h"
 #include "utils/dump.h"
 #include "utils/timer.h"
-#include "utils/colors.h"
+#include "utils/logger.h"
 
 #ifdef __cplusplus
 inline Instruction make_instruction(OpCode op, uint32_t operand) {
@@ -26,10 +26,10 @@ static inline Instruction make_instruction(OpCode op, uint32_t operand) {
 #endif
 
 int main(int argc, char** argv) {
-    colors_enable();
+    logger_init();
     
-    printf(COLOR_TITLE "GPU Bytecode VM" COLOR_RESET "\n");
-    printf(COLOR_TITLE "===============" COLOR_RESET "\n\n");
+    LOG_COLOR(COLOR_TITLE, "GPU Bytecode VM\n");
+    LOG_COLOR(COLOR_TITLE, "===============\n\n");
     
     size_t num_threads = 1024;
     size_t memory_size = 65536;  
@@ -46,13 +46,13 @@ int main(int argc, char** argv) {
         } else if (strcmp(argv[i], "-f") == 0 && i + 1 < argc) {
             program_file = argv[++i];
         } else if (strcmp(argv[i], "-h") == 0) {
-            printf(COLOR_TITLE "Usage: %s [options]" COLOR_RESET "\n", argv[0]);
-            printf(COLOR_LABEL "Options:" COLOR_RESET "\n");
-            printf("  " COLOR_INFO "-t <num>" COLOR_RESET "    Number of threads (default: 1024)\n");
-            printf("  " COLOR_INFO "-m <size>" COLOR_RESET "   Memory size in bytes (default: 65536)\n");
-            printf("  " COLOR_INFO "-i <num>" COLOR_RESET "    Max iterations per thread (default: 10000)\n");
-            printf("  " COLOR_INFO "-f <file>" COLOR_RESET "   Bytecode program file\n");
-            printf("  " COLOR_INFO "-h" COLOR_RESET "          Show this help\n");
+            LOG_COLOR(COLOR_TITLE, "Usage: %s [options]\n", argv[0]);
+            LOG_COLOR(COLOR_LABEL, "Options:\n");
+            LOG_COLOR(COLOR_INFO, "  -t <num>    Number of threads (default: 1024)\n");
+            LOG_COLOR(COLOR_INFO, "  -m <size>   Memory size in bytes (default: 65536)\n");
+            LOG_COLOR(COLOR_INFO, "  -i <num>    Max iterations per thread (default: 10000)\n");
+            LOG_COLOR(COLOR_INFO, "  -f <file>   Bytecode program file\n");
+            LOG_COLOR(COLOR_INFO, "  -h          Show this help\n");
             return 0;
         }
     }
@@ -60,34 +60,37 @@ int main(int argc, char** argv) {
     int device_count = 0;
     cudaError_t err = cudaGetDeviceCount(&device_count);
     if (err != cudaSuccess || device_count == 0) {
-        printf(COLOR_ERROR "Error: No CUDA devices found or CUDA not available." COLOR_RESET "\n");
+        LOG_ERROR("Error: No CUDA devices found or CUDA not available.\n");
         return 1;
     }
     
-    printf(COLOR_INFO "Found " COLOR_VALUE "%d" COLOR_INFO " CUDA device(s)" COLOR_RESET "\n", device_count);
+    LOG_COLOR(COLOR_INFO, "Found ");
+    LOG_COLOR(COLOR_VALUE, "%d", device_count);
+    LOG_COLOR(COLOR_INFO, " CUDA device(s)\n");
     
     GPUVirtualMachine* vm = gpu_vm_create(memory_size, num_threads, 0);
     if (!vm) {
-        printf(COLOR_ERROR "Error: Failed to create GPU VM" COLOR_RESET "\n");
+        LOG_ERROR("Error: Failed to create GPU VM\n");
         return 1;
     }
     
     gpu_vm_print_info(vm);
-    printf("\n");
+    LOG_COLOR(COLOR_RESET, "\n");
     
     BytecodeProgram* program = NULL;
     if (program_file) {
-        printf(COLOR_INFO "Loading program from file: " COLOR_VALUE "%s" COLOR_RESET "\n", program_file);
+        LOG_COLOR(COLOR_INFO, "Loading program from file: ");
+        LOG_COLOR(COLOR_VALUE, "%s\n", program_file);
         BytecodeProgram temp_program = {0};
         int result = bytecode_load_from_file(program_file, &temp_program);
         if (result != 0) {
-            printf(COLOR_ERROR "Error: Failed to load program from file: %s (error code: %d)" COLOR_RESET "\n", program_file, result);
+            LOG_ERROR("Error: Failed to load program from file: %s (error code: %d)\n", program_file, result);
             gpu_vm_destroy(vm);
             return 1;
         }
         program = bytecode_create(temp_program.instruction_count, temp_program.data_size);
         if (!program) {
-            printf(COLOR_ERROR "Error: Failed to allocate program memory" COLOR_RESET "\n");
+            LOG_ERROR("Error: Failed to allocate program memory\n");
             gpu_vm_destroy(vm);
             return 1;
         }
@@ -99,7 +102,8 @@ int main(int argc, char** argv) {
         free(temp_program.instructions);
         if (temp_program.data_segment) free(temp_program.data_segment);
     } else {
-        printf(COLOR_INFO "Creating sample program: " COLOR_HIGHLIGHT_TEXT "ADD test" COLOR_RESET "\n");
+        LOG_COLOR(COLOR_INFO, "Creating sample program: ");
+        LOG_COLOR(COLOR_HIGHLIGHT_TEXT, "ADD test\n");
         program = bytecode_create(10, 0);
         if (program) {
             program->instructions[0] = make_instruction(OP_LOAD_IMM, (0 << 16) | 5);
@@ -115,33 +119,36 @@ int main(int argc, char** argv) {
     }
     
     if (!program) {
-        printf(COLOR_ERROR "Error: Failed to create program" COLOR_RESET "\n");
+        LOG_ERROR("Error: Failed to create program\n");
         gpu_vm_destroy(vm);
         return 1;
     }
     
-    printf("\n" COLOR_HEADER "Program:" COLOR_RESET "\n");
+    LOG_COLOR(COLOR_RESET, "\n");
+    LOG_COLOR(COLOR_HEADER, "Program:\n");
     dump_program(program);
     
     if (gpu_vm_load_program(vm, program) != 0) {
         const char* error = gpu_vm_get_last_error(vm);
-        printf(COLOR_ERROR "Error: Failed to load program: %s" COLOR_RESET "\n", error);
+        LOG_ERROR("Error: Failed to load program: %s\n", error);
         bytecode_destroy(program);
         gpu_vm_destroy(vm);
         return 1;
     }
     
-    printf("\n" COLOR_HEADER "GPU VM Info (after loading program):" COLOR_RESET "\n");
+    LOG_COLOR(COLOR_RESET, "\n");
+    LOG_COLOR(COLOR_HEADER, "GPU VM Info (after loading program):\n");
     gpu_vm_print_info(vm);
-    printf("\n");
+    LOG_COLOR(COLOR_RESET, "\n");
     
-    printf("\n" COLOR_INFO "Executing on GPU..." COLOR_RESET "\n");
+    LOG_COLOR(COLOR_RESET, "\n");
+    LOG_INFO("Executing on GPU...\n");
     Timer timer;
     timer_start(&timer);
     
     if (gpu_vm_execute(vm, max_iterations) != 0) {
         const char* error = gpu_vm_get_last_error(vm);
-        printf(COLOR_ERROR "Error: GPU execution failed: %s" COLOR_RESET "\n", error);
+        LOG_ERROR("Error: GPU execution failed: %s\n", error);
         bytecode_destroy(program);
         gpu_vm_destroy(vm);
         return 1;
@@ -152,12 +159,18 @@ int main(int argc, char** argv) {
     float kernel_time = 0.0f, transfer_time = 0.0f;
     gpu_vm_get_performance_stats(vm, &kernel_time, &transfer_time);
     
-    printf(COLOR_LABEL "Execution time: " COLOR_VALUE "%.3f ms" COLOR_METADATA " (Host timer)" COLOR_RESET "\n", timer_elapsed_ms(&timer));
+    LOG_COLOR(COLOR_LABEL, "Execution time: ");
+    LOG_COLOR(COLOR_VALUE, "%.3f ms", timer_elapsed_ms(&timer));
+    LOG_COLOR(COLOR_METADATA, " (Host timer)\n");
     if (kernel_time > 0) {
-        printf(COLOR_LABEL "Kernel execution: " COLOR_VALUE "%.3f ms" COLOR_METADATA " (CUDA event)" COLOR_RESET "\n", kernel_time);
+        LOG_COLOR(COLOR_LABEL, "Kernel execution: ");
+        LOG_COLOR(COLOR_VALUE, "%.3f ms", kernel_time);
+        LOG_COLOR(COLOR_METADATA, " (CUDA event)\n");
     }
     if (transfer_time > 0) {
-        printf(COLOR_LABEL "Memory transfer: " COLOR_VALUE "%.3f ms" COLOR_METADATA " (CUDA event)" COLOR_RESET "\n", transfer_time);
+        LOG_COLOR(COLOR_LABEL, "Memory transfer: ");
+        LOG_COLOR(COLOR_VALUE, "%.3f ms", transfer_time);
+        LOG_COLOR(COLOR_METADATA, " (CUDA event)\n");
     }
     
     int32_t* registers = (int32_t*)malloc(sizeof(int32_t) * num_threads * 32);
@@ -165,7 +178,7 @@ int main(int argc, char** argv) {
     
     if (gpu_vm_get_results(vm, registers, memory) != 0) {
         const char* error = gpu_vm_get_last_error(vm);
-        printf(COLOR_ERROR "Error: Failed to get results: %s" COLOR_RESET "\n", error);
+        LOG_ERROR("Error: Failed to get results: %s\n", error);
         free(registers);
         free(memory);
         bytecode_destroy(program);
@@ -173,23 +186,31 @@ int main(int argc, char** argv) {
         return 1;
     }
     
-    printf("\n" COLOR_HEADER "Results (Thread 0):" COLOR_RESET "\n");
-    printf(COLOR_LABEL "Registers:" COLOR_RESET "\n");
+    LOG_COLOR(COLOR_RESET, "\n");
+    LOG_COLOR(COLOR_HEADER, "Results (Thread 0):\n");
+    LOG_COLOR(COLOR_LABEL, "Registers:\n");
     int regs_shown = 0;
     for (int i = 0; i < 32; i++) {
         if (registers[i] != 0) {
-            printf("  " COLOR_INFO "R%d" COLOR_RESET " = " COLOR_VALUE "%d" COLOR_METADATA " (0x%08X)" COLOR_RESET "\n", i, registers[i], registers[i]);
+            LOG_COLOR(COLOR_INFO, "  R%d", i);
+            LOG_COLOR(COLOR_RESET, " = ");
+            LOG_COLOR(COLOR_VALUE, "%d", registers[i]);
+            LOG_COLOR(COLOR_METADATA, " (0x%08X)\n", registers[i]);
             regs_shown++;
         }
     }
     if (regs_shown == 0) {
-        printf("  " COLOR_METADATA "(all registers are zero)" COLOR_RESET "\n");
+        LOG_COLOR(COLOR_METADATA, "  (all registers are zero)\n");
     }
     
-    printf("\n" COLOR_LABEL "Memory (first 16 words):" COLOR_RESET "\n");
+    LOG_COLOR(COLOR_RESET, "\n");
+    LOG_COLOR(COLOR_LABEL, "Memory (first 16 words):\n");
     for (int i = 0; i < 16; i++) {
         if (memory[i] != 0) {
-            printf("  " COLOR_INFO "[%d]" COLOR_RESET " = " COLOR_VALUE "%d" COLOR_METADATA " (0x%08X)" COLOR_RESET "\n", i, memory[i], memory[i]);
+            LOG_COLOR(COLOR_INFO, "  [%d]", i);
+            LOG_COLOR(COLOR_RESET, " = ");
+            LOG_COLOR(COLOR_VALUE, "%d", memory[i]);
+            LOG_COLOR(COLOR_METADATA, " (0x%08X)\n", memory[i]);
         }
     }
     
@@ -199,10 +220,14 @@ int main(int argc, char** argv) {
         int addr = key_addrs[i];
         if (addr < memory_size && memory[addr] != 0) {
             if (!found_any) {
-                printf("\n" COLOR_LABEL "Memory (key locations):" COLOR_RESET "\n");
+                LOG_COLOR(COLOR_RESET, "\n");
+                LOG_COLOR(COLOR_LABEL, "Memory (key locations):\n");
                 found_any = 1;
             }
-            printf("  " COLOR_INFO "[%d]" COLOR_RESET " = " COLOR_VALUE "%d" COLOR_METADATA " (0x%08X)" COLOR_RESET "\n", addr, memory[addr], memory[addr]);
+            LOG_COLOR(COLOR_INFO, "  [%d]", addr);
+            LOG_COLOR(COLOR_RESET, " = ");
+            LOG_COLOR(COLOR_VALUE, "%d", memory[addr]);
+            LOG_COLOR(COLOR_METADATA, " (0x%08X)\n", memory[addr]);
         }
     }
     
@@ -211,6 +236,7 @@ int main(int argc, char** argv) {
     bytecode_destroy(program);
     gpu_vm_destroy(vm);
     
-    printf("\n" COLOR_SUCCESS "Done." COLOR_RESET "\n");
+    LOG_COLOR(COLOR_RESET, "\n");
+    LOG_COLOR(COLOR_SUCCESS, "Done.\n");
     return 0;
 }

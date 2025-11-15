@@ -1,4 +1,5 @@
 #include "vm/bytecode.h"
+#include "utils/logger.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -122,7 +123,7 @@ int bytecode_save_to_file(const char* filename, const BytecodeProgram* program) 
 }
 
 void bytecode_print(const BytecodeProgram* program) {
-    printf("Bytecode Program:\n");
-    printf("  Instructions: %zu\n", program->instruction_count);
-    printf("  Data size: %zu bytes\n", program->data_size);
+    LOG_COLOR(COLOR_RESET, "Bytecode Program:\n");
+    LOG_COLOR(COLOR_RESET, "  Instructions: %zu\n", program->instruction_count);
+    LOG_COLOR(COLOR_RESET, "  Data size: %zu bytes\n", program->data_size);
 }

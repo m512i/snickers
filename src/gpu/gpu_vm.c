@@ -1,6 +1,6 @@
 #include "gpu/gpu_vm.h"
 #include "gpu/gpu_memory.h"
-#include "utils/colors.h"
+#include "utils/logger.h"
 #include <stdlib.h>
 #include <string.h>
 #include <cuda_runtime.h>
@@ -467,31 +467,55 @@ const char* gpu_vm_get_last_error(const GPUVirtualMachine* vm) {
 void gpu_vm_print_info(const GPUVirtualMachine* vm) {
     if (!vm) return;
     
-    printf(COLOR_HEADER "GPU VM Info:" COLOR_RESET "\n");
-    printf("  " COLOR_LABEL "Device ID:" COLOR_RESET " " COLOR_VALUE "%d" COLOR_RESET "\n", vm->device_id);
-    printf("  " COLOR_LABEL "Threads:" COLOR_RESET " " COLOR_VALUE "%zu" COLOR_RESET "\n", vm->num_threads);
-    printf("  " COLOR_LABEL "Blocks:" COLOR_RESET " " COLOR_VALUE "%zu" COLOR_RESET "\n", vm->num_blocks);
-    printf("  " COLOR_LABEL "Threads per Block:" COLOR_RESET " " COLOR_VALUE "%d" COLOR_RESET "\n", vm->threads_per_block);
-    printf("  " COLOR_LABEL "Memory Size:" COLOR_RESET " " COLOR_VALUE "%zu bytes" COLOR_RESET "\n", vm->gpu_mem->memory_size);
-    printf("  " COLOR_LABEL "Pinned Memory:" COLOR_RESET " %s\n", 
-           vm->gpu_mem->use_pinned_memory ? COLOR_SUCCESS "Yes" : COLOR_WARNING "No");
-    printf("  " COLOR_LABEL "Constant Memory:" COLOR_RESET " %s\n", 
-           vm->gpu_mem->use_constant_memory ? COLOR_SUCCESS "Yes" : COLOR_WARNING "No");
+    LOG_COLOR(COLOR_HEADER, "GPU VM Info:\n");
+    LOG_COLOR(COLOR_LABEL, "  Device ID:");
+    LOG_COLOR(COLOR_RESET, " ");
+    LOG_COLOR(COLOR_VALUE, "%d\n", vm->device_id);
+    LOG_COLOR(COLOR_LABEL, "  Threads:");
+    LOG_COLOR(COLOR_RESET, " ");
+    LOG_COLOR(COLOR_VALUE, "%zu\n", vm->num_threads);
+    LOG_COLOR(COLOR_LABEL, "  Blocks:");
+    LOG_COLOR(COLOR_RESET, " ");
+    LOG_COLOR(COLOR_VALUE, "%zu\n", vm->num_blocks);
+    LOG_COLOR(COLOR_LABEL, "  Threads per Block:");
+    LOG_COLOR(COLOR_RESET, " ");
+    LOG_COLOR(COLOR_VALUE, "%d\n", vm->threads_per_block);
+    LOG_COLOR(COLOR_LABEL, "  Memory Size:");
+    LOG_COLOR(COLOR_RESET, " ");
+    LOG_COLOR(COLOR_VALUE, "%zu bytes\n", vm->gpu_mem->memory_size);
+    LOG_COLOR(COLOR_LABEL, "  Pinned Memory:");
+    LOG_COLOR(COLOR_RESET, " ");
+    LOG_COLOR(vm->gpu_mem->use_pinned_memory ? COLOR_SUCCESS : COLOR_WARNING, "%s\n", 
+           vm->gpu_mem->use_pinned_memory ? "Yes" : "No");
+    LOG_COLOR(COLOR_LABEL, "  Constant Memory:");
+    LOG_COLOR(COLOR_RESET, " ");
+    LOG_COLOR(vm->gpu_mem->use_constant_memory ? COLOR_SUCCESS : COLOR_WARNING, "%s\n", 
+           vm->gpu_mem->use_constant_memory ? "Yes" : "No");
     if (vm->program) {
-        printf("  " COLOR_LABEL "Program Size:" COLOR_RESET " " COLOR_VALUE "%zu instructions" COLOR_RESET "\n", vm->program->instruction_count);
+        LOG_COLOR(COLOR_LABEL, "  Program Size:");
+        LOG_COLOR(COLOR_RESET, " ");
+        LOG_COLOR(COLOR_VALUE, "%zu instructions\n", vm->program->instruction_count);
     }
     if (vm->kernel_time_ms > 0) {
-        printf("  " COLOR_LABEL "Last Kernel Time:" COLOR_RESET " " COLOR_VALUE "%.3f ms" COLOR_RESET "\n", vm->kernel_time_ms);
+        LOG_COLOR(COLOR_LABEL, "  Last Kernel Time:");
+        LOG_COLOR(COLOR_RESET, " ");
+        LOG_COLOR(COLOR_VALUE, "%.3f ms\n", vm->kernel_time_ms);
     }
     if (vm->transfer_time_ms > 0) {
-        printf("  " COLOR_LABEL "Last Transfer Time:" COLOR_RESET " " COLOR_VALUE "%.3f ms" COLOR_RESET "\n", vm->transfer_time_ms);
+        LOG_COLOR(COLOR_LABEL, "  Last Transfer Time:");
+        LOG_COLOR(COLOR_RESET, " ");
+        LOG_COLOR(COLOR_VALUE, "%.3f ms\n", vm->transfer_time_ms);
     }
     if (vm->memory_per_thread > 0) {
-        printf("  " COLOR_LABEL "Memory per Thread:" COLOR_RESET " " COLOR_VALUE "%zu words" COLOR_METADATA " (isolated)" COLOR_RESET "\n", vm->memory_per_thread);
+        LOG_COLOR(COLOR_LABEL, "  Memory per Thread:");
+        LOG_COLOR(COLOR_RESET, " ");
+        LOG_COLOR(COLOR_VALUE, "%zu words", vm->memory_per_thread);
+        LOG_COLOR(COLOR_METADATA, " (isolated)\n");
     } else {
-        printf("  " COLOR_LABEL "Memory:" COLOR_RESET " " COLOR_INFO "Shared (all threads)" COLOR_RESET "\n");
+        LOG_COLOR(COLOR_LABEL, "  Memory:");
+        LOG_COLOR(COLOR_RESET, " ");
+        LOG_INFO("Shared (all threads)\n");
     }
-    printf(COLOR_RESET);
 }
 
 int gpu_vm_set_memory_isolation(GPUVirtualMachine* vm, size_t memory_per_thread) {

@@ -1,4 +1,5 @@
 #include "vm/vm_state.h"
+#include "utils/logger.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -69,15 +70,15 @@ int vm_state_get_flag(const VMState* state, uint32_t flag) {
 void vm_state_print(const VMState* state) {
     if (!state) return;
     
-    printf("=== VM State ===\n");
-    printf("PC: %u\n", state->pc);
-    printf("Stack Ptr: %d\n", state->stack_ptr);
-    printf("Flags: 0x%08X\n", state->flags);
+    LOG_COLOR(COLOR_RESET, "=== VM State ===\n");
+    LOG_COLOR(COLOR_RESET, "PC: %u\n", state->pc);
+    LOG_COLOR(COLOR_RESET, "Stack Ptr: %d\n", state->stack_ptr);
+    LOG_COLOR(COLOR_RESET, "Flags: 0x%08X\n", state->flags);
     
-    printf("Registers:\n");
+    LOG_COLOR(COLOR_RESET, "Registers:\n");
     for (int i = 0; i < VM_MAX_REGISTERS; i++) {
         if (state->registers[i] != 0) {
-            printf("  R%02d: 0x%08X (%d)\n", i, state->registers[i], state->registers[i]);
+            LOG_COLOR(COLOR_RESET, "  R%02d: 0x%08X (%d)\n", i, state->registers[i], state->registers[i]);
         }
     }
 }

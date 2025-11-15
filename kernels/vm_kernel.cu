@@ -3,6 +3,7 @@
 #include <string.h>
 #include "../include/vm/bytecode.h"
 #include "device_instructions.cuh"
+#include "device_handlers_impl.cuh"
 
 // Constant memory for small programs (up to 64KB / sizeof(Instruction))
 // This is faster for instruction fetch as it's cached

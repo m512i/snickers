@@ -29,13 +29,21 @@ KERNELDIR = kernels
 BUILDDIR = build
 INCLUDEDIR = include
 
+# Header files (automatically included via #include, listed here for reference)
+# New refactored headers for DRY/SOLID/Strategy pattern:
+#   include/vm/operand_helpers.h - Shared operand extraction macros
+#   include/vm/instruction_handlers.h - Strategy pattern handler interface
+#   kernels/device_handlers.cuh - Device instruction handler declarations
+#   kernels/device_handlers_impl.cuh - Device instruction handler implementations
+
 # Object files
 C_OBJECTS = build\vm\bytecode.obj \
             build\vm\instructions.obj \
             build\vm\vm_state.obj \
             build\utils\dump.obj \
             build\utils\timer.obj \
-            build\utils\colors.obj
+            build\utils\colors.obj \
+            build\utils\logger.obj
 
 # Main and GPU C files use CUDA runtime
 # gpu_vm.c needs nvcc because it uses cudaDeviceProp and other CUDA types
@@ -89,6 +97,10 @@ build\utils\timer.obj: $(SRCDIR)\utils\timer.c
 	$(CC) $(CFLAGS) $** /Fo$@
 
 build\utils\colors.obj: $(SRCDIR)\utils\colors.c
+	@if not exist build\utils mkdir build\utils
+	$(CC) $(CFLAGS) $** /Fo$@
+
+build\utils\logger.obj: $(SRCDIR)\utils\logger.c
 	@if not exist build\utils mkdir build\utils
 	$(CC) $(CFLAGS) $** /Fo$@
 
