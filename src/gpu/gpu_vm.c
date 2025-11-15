@@ -467,7 +467,29 @@ const char* gpu_vm_get_last_error(const GPUVirtualMachine* vm) {
 void gpu_vm_print_info(const GPUVirtualMachine* vm) {
     if (!vm) return;
     
+    cudaDeviceProp prop;
+    cudaError_t err = cudaGetDeviceProperties(&prop, vm->device_id);
+    
     LOG_COLOR(COLOR_HEADER, "GPU VM Info:\n");
+    
+    if (err == cudaSuccess) {
+        LOG_COLOR(COLOR_LABEL, "  GPU Device:");
+        LOG_COLOR(COLOR_RESET, " ");
+        LOG_COLOR(COLOR_VALUE, "%s\n", prop.name);
+        LOG_COLOR(COLOR_LABEL, "  Compute Capability:");
+        LOG_COLOR(COLOR_RESET, " ");
+        LOG_COLOR(COLOR_VALUE, "%d.%d\n", prop.major, prop.minor);
+        LOG_COLOR(COLOR_LABEL, "  Total Global Memory:");
+        LOG_COLOR(COLOR_RESET, " ");
+        LOG_COLOR(COLOR_VALUE, "%.2f GB\n", prop.totalGlobalMem / (1024.0 * 1024.0 * 1024.0));
+        LOG_COLOR(COLOR_LABEL, "  Multiprocessors:");
+        LOG_COLOR(COLOR_RESET, " ");
+        LOG_COLOR(COLOR_VALUE, "%d\n", prop.multiProcessorCount);
+        LOG_COLOR(COLOR_LABEL, "  Max Threads per Block:");
+        LOG_COLOR(COLOR_RESET, " ");
+        LOG_COLOR(COLOR_VALUE, "%d\n", prop.maxThreadsPerBlock);
+    }
+    
     LOG_COLOR(COLOR_LABEL, "  Device ID:");
     LOG_COLOR(COLOR_RESET, " ");
     LOG_COLOR(COLOR_VALUE, "%d\n", vm->device_id);

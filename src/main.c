@@ -34,6 +34,7 @@ int main(int argc, char** argv) {
     size_t num_threads = 1024;
     size_t memory_size = 65536;  
     int max_iterations = 10000;
+    int device_id = 0;
     const char* program_file = NULL;
     
     for (int i = 1; i < argc; i++) {
@@ -43,6 +44,8 @@ int main(int argc, char** argv) {
             memory_size = (size_t)atoi(argv[++i]);
         } else if (strcmp(argv[i], "-i") == 0 && i + 1 < argc) {
             max_iterations = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-d") == 0 && i + 1 < argc) {
+            device_id = atoi(argv[++i]);
         } else if (strcmp(argv[i], "-f") == 0 && i + 1 < argc) {
             program_file = argv[++i];
         } else if (strcmp(argv[i], "-h") == 0) {
@@ -51,6 +54,7 @@ int main(int argc, char** argv) {
             LOG_COLOR(COLOR_INFO, "  -t <num>    Number of threads (default: 1024)\n");
             LOG_COLOR(COLOR_INFO, "  -m <size>   Memory size in bytes (default: 65536)\n");
             LOG_COLOR(COLOR_INFO, "  -i <num>    Max iterations per thread (default: 10000)\n");
+            LOG_COLOR(COLOR_INFO, "  -d <id>     CUDA device ID (default: 0)\n");
             LOG_COLOR(COLOR_INFO, "  -f <file>   Bytecode program file\n");
             LOG_COLOR(COLOR_INFO, "  -h          Show this help\n");
             return 0;
@@ -61,6 +65,7 @@ int main(int argc, char** argv) {
     cudaError_t err = cudaGetDeviceCount(&device_count);
     if (err != cudaSuccess || device_count == 0) {
         LOG_ERROR("Error: No CUDA devices found or CUDA not available.\n");
+        LOG_ERROR("Make sure you have an NVIDIA GPU with CUDA support installed.\n");
         return 1;
     }
     
@@ -68,7 +73,29 @@ int main(int argc, char** argv) {
     LOG_COLOR(COLOR_VALUE, "%d", device_count);
     LOG_COLOR(COLOR_INFO, " CUDA device(s)\n");
     
-    GPUVirtualMachine* vm = gpu_vm_create(memory_size, num_threads, 0);
+    for (int i = 0; i < device_count; i++) {
+        cudaDeviceProp prop;
+        cudaError_t prop_err = cudaGetDeviceProperties(&prop, i);
+        if (prop_err == cudaSuccess) {
+            LOG_COLOR(COLOR_INFO, "  Device %d: ", i);
+            LOG_COLOR(COLOR_VALUE, "%s", prop.name);
+            LOG_COLOR(COLOR_METADATA, " (Compute %d.%d)", prop.major, prop.minor);
+            if (i == device_id) {
+                LOG_COLOR(COLOR_SUCCESS, " [SELECTED]\n");
+            } else {
+                LOG_COLOR(COLOR_RESET, "\n");
+            }
+        }
+    }
+    
+    if (device_id < 0 || device_id >= device_count) {
+        LOG_ERROR("Error: Invalid device ID %d. Valid range: 0-%d\n", device_id, device_count - 1);
+        return 1;
+    }
+    
+    LOG_COLOR(COLOR_INFO, "\nUsing device %d\n", device_id);
+    
+    GPUVirtualMachine* vm = gpu_vm_create(memory_size, num_threads, device_id);
     if (!vm) {
         LOG_ERROR("Error: Failed to create GPU VM\n");
         return 1;
@@ -78,45 +105,33 @@ int main(int argc, char** argv) {
     LOG_COLOR(COLOR_RESET, "\n");
     
     BytecodeProgram* program = NULL;
-    if (program_file) {
-        LOG_COLOR(COLOR_INFO, "Loading program from file: ");
-        LOG_COLOR(COLOR_VALUE, "%s\n", program_file);
-        BytecodeProgram temp_program = {0};
-        int result = bytecode_load_from_file(program_file, &temp_program);
-        if (result != 0) {
-            LOG_ERROR("Error: Failed to load program from file: %s (error code: %d)\n", program_file, result);
-            gpu_vm_destroy(vm);
-            return 1;
-        }
-        program = bytecode_create(temp_program.instruction_count, temp_program.data_size);
-        if (!program) {
-            LOG_ERROR("Error: Failed to allocate program memory\n");
-            gpu_vm_destroy(vm);
-            return 1;
-        }
-        memcpy(program->instructions, temp_program.instructions, 
-               sizeof(Instruction) * temp_program.instruction_count);
-        if (temp_program.data_size > 0 && temp_program.data_segment) {
-            memcpy(program->data_segment, temp_program.data_segment, temp_program.data_size);
-        }
-        free(temp_program.instructions);
-        if (temp_program.data_segment) free(temp_program.data_segment);
-    } else {
-        LOG_COLOR(COLOR_INFO, "Creating sample program: ");
-        LOG_COLOR(COLOR_HIGHLIGHT_TEXT, "ADD test\n");
-        program = bytecode_create(10, 0);
-        if (program) {
-            program->instructions[0] = make_instruction(OP_LOAD_IMM, (0 << 16) | 5);
-            program->instructions[1] = make_instruction(OP_LOAD_IMM, (1 << 16) | 3);
-            program->instructions[2] = make_instruction(OP_ADD, (0 << 16) | (0 << 8) | 1);
-            program->instructions[3] = make_instruction(OP_STORE, (0 << 16) | 0);
-            program->instructions[4] = make_instruction(OP_HALT, 0);
-            
-            for (int i = 5; i < 10; i++) {
-                program->instructions[i] = make_instruction(OP_NOP, 0);
-            }
-        }
+    
+    const char* default_file = "gpu_tests/add_data.bc";
+    const char* file_to_load = program_file ? program_file : default_file;
+    
+    LOG_COLOR(COLOR_INFO, "Loading program from file: ");
+    LOG_COLOR(COLOR_VALUE, "%s\n", file_to_load);
+    BytecodeProgram temp_program = {0};
+    int result = bytecode_load_from_file(file_to_load, &temp_program);
+    if (result != 0) {
+        LOG_ERROR("Error: Failed to load program from file: %s (error code: %d)\n", file_to_load, result);
+        LOG_ERROR("Make sure the file exists. You can generate test files by running generate_gpu_tests.exe\n");
+        gpu_vm_destroy(vm);
+        return 1;
     }
+    program = bytecode_create(temp_program.instruction_count, temp_program.data_size);
+    if (!program) {
+        LOG_ERROR("Error: Failed to allocate program memory\n");
+        gpu_vm_destroy(vm);
+        return 1;
+    }
+    memcpy(program->instructions, temp_program.instructions, 
+           sizeof(Instruction) * temp_program.instruction_count);
+    if (temp_program.data_size > 0 && temp_program.data_segment) {
+        memcpy(program->data_segment, temp_program.data_segment, temp_program.data_size);
+    }
+    free(temp_program.instructions);
+    if (temp_program.data_segment) free(temp_program.data_segment);
     
     if (!program) {
         LOG_ERROR("Error: Failed to create program\n");
@@ -127,6 +142,16 @@ int main(int argc, char** argv) {
     LOG_COLOR(COLOR_RESET, "\n");
     LOG_COLOR(COLOR_HEADER, "Program:\n");
     dump_program(program);
+    
+    if (program->data_size > 0 && program->data_segment) {
+        LOG_COLOR(COLOR_INFO, "\nData segment will initialize GPU memory[0-%zu] with:\n", 
+                  (program->data_size / sizeof(int32_t)) - 1);
+        int32_t* data = (int32_t*)program->data_segment;
+        for (size_t i = 0; i < program->data_size / sizeof(int32_t); i++) {
+            LOG_COLOR(COLOR_INFO, "  memory[%zu] = ", i);
+            LOG_COLOR(COLOR_VALUE, "%d\n", data[i]);
+        }
+    }
     
     if (gpu_vm_load_program(vm, program) != 0) {
         const char* error = gpu_vm_get_last_error(vm);
@@ -201,7 +226,7 @@ int main(int argc, char** argv) {
     }
     if (regs_shown == 0) {
         LOG_COLOR(COLOR_METADATA, "  (all registers are zero)\n");
-    }
+        }
     
     LOG_COLOR(COLOR_RESET, "\n");
     LOG_COLOR(COLOR_LABEL, "Memory (first 16 words):\n");
@@ -210,11 +235,15 @@ int main(int argc, char** argv) {
             LOG_COLOR(COLOR_INFO, "  [%d]", i);
             LOG_COLOR(COLOR_RESET, " = ");
             LOG_COLOR(COLOR_VALUE, "%d", memory[i]);
-            LOG_COLOR(COLOR_METADATA, " (0x%08X)\n", memory[i]);
+            LOG_COLOR(COLOR_METADATA, " (0x%08X)", memory[i]);
+            if (program && program->data_size > 0 && i < (int)(program->data_size / sizeof(int32_t))) {
+                LOG_COLOR(COLOR_METADATA, " [from data segment]");
+            }
+            LOG_COLOR(COLOR_RESET, "\n");
         }
     }
     
-    int key_addrs[] = {50, 60, 100, 101, 200, 201, 202};
+    int key_addrs[] = {20, 21, 22, 23, 50, 60, 100, 101, 200, 201, 202};
     int found_any = 0;
     for (int i = 0; i < sizeof(key_addrs)/sizeof(key_addrs[0]); i++) {
         int addr = key_addrs[i];

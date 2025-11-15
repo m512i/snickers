@@ -4,6 +4,10 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum {
     OP_NOP = 0,
     OP_ADD,
@@ -87,5 +91,9 @@ void bytecode_destroy(BytecodeProgram* program);
 int bytecode_load_from_file(const char* filename, BytecodeProgram* program);
 int bytecode_save_to_file(const char* filename, const BytecodeProgram* program);
 void bytecode_print(const BytecodeProgram* program);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

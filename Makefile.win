@@ -1,26 +1,16 @@
-# NMake Makefile for GPU Bytecode VM (Windows)
-# Use with: nmake /f Makefile.win
-#
-# Compiles .c files with cl (MSVC) and .cu files with nvcc
-# Links everything together with nvcc for CUDA runtime support
-
 NVCC = nvcc
 NVCCFLAGS = -arch=sm_75 -rdc=true -std=c++14 -Iinclude -allow-unsupported-compiler
 CC = cl
 CXX = cl
 
-# Get CUDA include directory from environment variable
-# CUDA_PATH should be set by CUDA installer (e.g., C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0)
 !IF "$(CUDA_PATH)" == ""
 CUDA_PATH = C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0
 !ENDIF
 CUDA_INC = "$(CUDA_PATH)\include"
 
-# C flags for regular C files (no CUDA)
-CFLAGS = /W3 /std:c11 /Zi /I$(INCLUDEDIR) /EHsc /c
+CFLAGS = /W3 /std:c11 /Zi /FS /I$(INCLUDEDIR) /EHsc /c
 
-# C flags for C files that use CUDA runtime (add CUDA includes)
-CFLAGS_CUDA = /W3 /std:c11 /Zi /I$(INCLUDEDIR) /I$(CUDA_INC) /EHsc /c
+CFLAGS_CUDA = /W3 /std:c11 /Zi /FS /I$(INCLUDEDIR) /I$(CUDA_INC) /EHsc /c
 
 LDFLAGS = cudart.lib
 
@@ -29,14 +19,7 @@ KERNELDIR = kernels
 BUILDDIR = build
 INCLUDEDIR = include
 
-# Header files (automatically included via #include, listed here for reference)
-# New refactored headers for DRY/SOLID/Strategy pattern:
-#   include/vm/operand_helpers.h - Shared operand extraction macros
-#   include/vm/instruction_handlers.h - Strategy pattern handler interface
-#   kernels/device_handlers.cuh - Device instruction handler declarations
-#   kernels/device_handlers_impl.cuh - Device instruction handler implementations
 
-# Object files
 C_OBJECTS = build\vm\bytecode.obj \
             build\vm\instructions.obj \
             build\vm\vm_state.obj \
@@ -45,19 +28,16 @@ C_OBJECTS = build\vm\bytecode.obj \
             build\utils\colors.obj \
             build\utils\logger.obj
 
-# Main and GPU C files use CUDA runtime
-# gpu_vm.c needs nvcc because it uses cudaDeviceProp and other CUDA types
-MAIN_OBJECT = build\main.obj
+MAIN_OBJECT = 
 GPU_C_OBJECTS = build\gpu\gpu_memory.obj
 
-# Files that need nvcc (CUDA kernel and gpu_vm.c which uses CUDA types)
 CUDA_OBJECTS = build\kernels\vm_kernel.obj \
-               build\gpu\gpu_vm.obj
+               build\gpu\gpu_vm.obj \
+               build\main.obj
 
-# Test runner object (doesn't use CUDA, just VM host code)
 TEST_OBJECTS = build\tests\test_runner.obj
 
-OBJECTS = $(C_OBJECTS) $(MAIN_OBJECT) $(GPU_C_OBJECTS) $(CUDA_OBJECTS)
+OBJECTS = $(C_OBJECTS) $(GPU_C_OBJECTS) $(CUDA_OBJECTS)
 
 TARGET = build\gpu_vm.exe
 TEST_TARGET = build\test_runner.exe
@@ -75,7 +55,6 @@ $(BUILDDIR):
 $(TARGET): $(OBJECTS)
 	$(NVCC) $(OBJECTS) -o $(TARGET) $(LDFLAGS)
 
-# Compile regular C source files (no CUDA) with cl
 build\vm\bytecode.obj: $(SRCDIR)\vm\bytecode.c
 	@if not exist build\vm mkdir build\vm
 	$(CC) $(CFLAGS) $** /Fo$@
@@ -104,17 +83,14 @@ build\utils\logger.obj: $(SRCDIR)\utils\logger.c
 	@if not exist build\utils mkdir build\utils
 	$(CC) $(CFLAGS) $** /Fo$@
 
-# Compile main.c with cl (uses CUDA runtime, needs CUDA includes)
 build\main.obj: $(SRCDIR)\main.c
 	@if not exist build mkdir build
-	$(CC) $(CFLAGS_CUDA) $** /Fo$@
+	$(NVCC) $(NVCCFLAGS) -x cu -c $** -o $@ -I$(INCLUDEDIR)
 
-# Compile GPU C files with cl (use CUDA runtime, needs CUDA includes)
 build\gpu\gpu_memory.obj: $(SRCDIR)\gpu\gpu_memory.c
 	@if not exist build\gpu mkdir build\gpu
 	$(CC) $(CFLAGS_CUDA) $** /Fo$@
 
-# Compile .cu files and gpu_vm.c with nvcc (gpu_vm.c uses CUDA types like cudaDeviceProp)
 build\kernels\vm_kernel.obj: $(KERNELDIR)\vm_kernel.cu
 	@if not exist build\kernels mkdir build\kernels
 	$(NVCC) $(NVCCFLAGS) -c $** -o $@ -I$(INCLUDEDIR)
@@ -123,32 +99,25 @@ build\gpu\gpu_vm.obj: $(SRCDIR)\gpu\gpu_vm.c
 	@if not exist build\gpu mkdir build\gpu
 	$(NVCC) $(NVCCFLAGS) -x cu -c $** -o $@ -I$(INCLUDEDIR)
 
-# Compile test runner (no CUDA, just host VM code)
 build\tests\test_runner.obj: tests\test_runner.c
 	@if not exist build\tests mkdir build\tests
 	$(CC) $(CFLAGS) $** /Fo$@
 
-# Build test runner executable (links only C objects, no CUDA)
 $(TEST_TARGET): $(BUILDDIR) $(C_OBJECTS) $(TEST_OBJECTS)
 	$(CC) $(C_OBJECTS) $(TEST_OBJECTS) /Fe$@ /link
 
-# Test generator executable
 TESTGEN_OBJECTS = build\tests\generate_gpu_tests.obj
 
-# Test target - build and run tests
 test: $(TEST_TARGET)
 	@echo Running tests...
 	@$(TEST_TARGET)
 
-# Build test generator
 testgen: $(TESTGEN_TARGET)
 
-# Compile test generator
 build\tests\generate_gpu_tests.obj: tests\generate_gpu_tests.c
 	@if not exist build\tests mkdir build\tests
 	$(CC) $(CFLAGS) $** /Fo$@
 
-# Link test generator
 $(TESTGEN_TARGET): $(TESTGEN_OBJECTS) $(C_OBJECTS)
 	$(CC) $(C_OBJECTS) $(TESTGEN_OBJECTS) /Fe$@ /link
 
@@ -166,7 +135,6 @@ help:
 	@echo.
 	@echo Note: Edit CUDA_PATH in Makefile.win if CUDA is not at default location
 
-# Generate GPU tests and run them
 gputest: $(TARGET) $(TESTGEN_TARGET)
 	@echo Generating GPU test files...
 	@$(TESTGEN_TARGET)
