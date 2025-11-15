@@ -1,0 +1,4 @@
+tests/generate_gpu_tests.c
+tests/bytecode_samples/add_test.bc
+tests/bytecode_samples/branch.bc
+tests/bytecode_samples/loop.bc
