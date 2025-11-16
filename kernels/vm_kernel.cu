@@ -5,11 +5,41 @@
 #include "device_instructions.cuh"
 #include "device_handlers_impl.cuh"
 
-// Constant memory for small programs (up to 64KB / sizeof(Instruction))
-// This is faster for instruction fetch as it's cached
 #define MAX_CONSTANT_PROGRAM_SIZE 8192 
 
 __constant__ Instruction program_const[MAX_CONSTANT_PROGRAM_SIZE];
+
+__device__ inline void prefetch_instruction_global(const Instruction* program, uint32_t next_pc, size_t program_size) {
+    if (next_pc < program_size) {
+        volatile const Instruction* prefetch_ptr = &program[next_pc];
+        (void)*prefetch_ptr;  
+    }
+}
+
+__device__ inline void warm_instruction_cache_global(const Instruction* program, uint32_t start_pc, size_t program_size) {
+    const uint32_t warm_range = 32;
+    volatile const Instruction* warm_ptr;
+    for (uint32_t i = 0; i < warm_range && (start_pc + i) < program_size; i++) {
+        warm_ptr = &program[start_pc + i];
+        (void)*warm_ptr;  
+    }
+}
+
+__device__ inline void warm_instruction_cache_const(uint32_t start_pc, size_t program_size) {
+    const uint32_t warm_range = 32;
+    volatile const Instruction* warm_ptr;
+    for (uint32_t i = 0; i < warm_range && (start_pc + i) < program_size; i++) {
+        warm_ptr = &program_const[start_pc + i];
+        (void)*warm_ptr; 
+    }
+}
+
+__device__ inline void prefetch_instruction_const(uint32_t next_pc, size_t program_size) {
+    if (next_pc < program_size) {
+        volatile const Instruction* prefetch_ptr = &program_const[next_pc];
+        (void)*prefetch_ptr;
+    }
+}
 
 typedef struct {
     uint32_t error_code;  
@@ -55,6 +85,9 @@ __global__ void vm_execute_kernel(
     if (memory_per_thread > 0) {
         thread_memory = &global_memory[thread_id * memory_per_thread];
     }
+    
+    warm_instruction_cache_global(program, pc, program_size);
+    
     int iterations = 0;
     while (iterations < max_iterations) {
         if (pc >= program_size) {
@@ -66,6 +99,8 @@ __global__ void vm_execute_kernel(
         }
         
         const Instruction* instr = &program[pc];
+        uint32_t next_pc = pc + 1;
+        prefetch_instruction_global(program, next_pc, program_size);
         
         size_t effective_memory_size = (memory_per_thread > 0) ? memory_per_thread : memory_size;
         
@@ -81,6 +116,10 @@ __global__ void vm_execute_kernel(
         
         if (halt != 0) {
             break;  
+        }
+        
+        if (pc < program_size && pc != next_pc) {
+            prefetch_instruction_global(program, pc, program_size);
         }
         
         iterations++;
@@ -151,6 +190,8 @@ __global__ void vm_execute_kernel_const(
         thread_memory = &global_memory[thread_id * memory_per_thread];
     }
     
+    warm_instruction_cache_const(pc, program_size);
+    
     int iterations = 0;
     while (iterations < max_iterations) {
         if (pc >= program_size) {
@@ -162,6 +203,9 @@ __global__ void vm_execute_kernel_const(
         }
         
         const Instruction* instr = &program_const[pc];
+        uint32_t next_pc = pc + 1;
+        prefetch_instruction_const(next_pc, program_size);
+        
         size_t effective_memory_size = (memory_per_thread > 0) ? memory_per_thread : memory_size;
         
         int halt = device_execute_instruction(
@@ -176,6 +220,10 @@ __global__ void vm_execute_kernel_const(
         
         if (halt != 0) {
             break;
+        }
+        
+        if (pc < program_size && pc != next_pc) {
+            prefetch_instruction_const(pc, program_size);
         }
         
         iterations++;

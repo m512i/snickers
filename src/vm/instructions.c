@@ -17,6 +17,7 @@ const char* instruction_get_name(OpCode opcode) {
         "CMOV", "BRANCH_HINT",
         "VLOAD2", "VLOAD4", "VSTORE2", "VSTORE4",
         "PREFETCH",
+        "LOAD_STRING_PTR", "STR_LEN", "STR_CMP", "STR_COPY",
         "HALT", "BREAKPOINT"
     };
     
@@ -45,6 +46,7 @@ int instruction_get_operand_count(OpCode opcode) {
         case OP_JMP_FALSE:
         case OP_CALL:
         case OP_PUSH:
+        case OP_LOAD_STRING_PTR:
             return 1;
         
         case OP_ADD:
@@ -63,6 +65,9 @@ int instruction_get_operand_count(OpCode opcode) {
         case OP_LE:
         case OP_GT:
         case OP_GE:
+        case OP_STR_LEN:
+        case OP_STR_CMP:
+        case OP_STR_COPY:
             return 1;  
         
         default:

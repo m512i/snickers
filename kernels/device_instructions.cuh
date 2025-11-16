@@ -98,6 +98,10 @@ __device__ int32_t device_execute_instruction(
         case OP_VSTORE2: handler = device_handler_vstore2; break;
         case OP_VSTORE4: handler = device_handler_vstore4; break;
         case OP_PREFETCH: handler = device_handler_prefetch; break;
+        case OP_LOAD_STRING_PTR: handler = device_handler_load_string_ptr; break;
+        case OP_STR_LEN: handler = device_handler_str_len; break;
+        case OP_STR_CMP: handler = device_handler_str_cmp; break;
+        case OP_STR_COPY: handler = device_handler_str_copy; break;
         case OP_HALT: handler = device_handler_halt; break;
         case OP_BREAKPOINT: handler = device_handler_breakpoint; break;
         default:

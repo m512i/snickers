@@ -575,6 +575,46 @@ __device__ int32_t device_handler_prefetch(
     size_t program_size
 );
 
+__device__ int32_t device_handler_load_string_ptr(
+    const Instruction* instr,
+    DeviceVMState* state,
+    int32_t* shared_memory,
+    uint32_t* pc,
+    int32_t* global_memory,
+    size_t memory_size,
+    size_t program_size
+);
+
+__device__ int32_t device_handler_str_len(
+    const Instruction* instr,
+    DeviceVMState* state,
+    int32_t* shared_memory,
+    uint32_t* pc,
+    int32_t* global_memory,
+    size_t memory_size,
+    size_t program_size
+);
+
+__device__ int32_t device_handler_str_cmp(
+    const Instruction* instr,
+    DeviceVMState* state,
+    int32_t* shared_memory,
+    uint32_t* pc,
+    int32_t* global_memory,
+    size_t memory_size,
+    size_t program_size
+);
+
+__device__ int32_t device_handler_str_copy(
+    const Instruction* instr,
+    DeviceVMState* state,
+    int32_t* shared_memory,
+    uint32_t* pc,
+    int32_t* global_memory,
+    size_t memory_size,
+    size_t program_size
+);
+
 __device__ int32_t device_handler_halt(
     const Instruction* instr,
     DeviceVMState* state,

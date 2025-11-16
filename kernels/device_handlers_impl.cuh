@@ -1039,6 +1039,179 @@ __device__ int32_t device_handler_prefetch(
     return 0;
 }
 
+__device__ int32_t device_handler_load_string_ptr(
+    const Instruction* instr,
+    DeviceVMState* state,
+    int32_t* shared_memory,
+    uint32_t* pc,
+    int32_t* global_memory,
+    size_t memory_size,
+    size_t program_size
+) {
+    (void)shared_memory; (void)program_size;
+    uint32_t op = instr->operand;
+    int32_t reg_idx_dst = EXTRACT_REG_DST(op);
+    uint32_t byte_offset = EXTRACT_ADDRESS(op);  
+    if (DEVICE_VALIDATE_REG(reg_idx_dst)) {
+        state->registers[reg_idx_dst] = (int32_t)byte_offset;
+        device_update_flags(state, state->registers[reg_idx_dst]);
+        state->memory_access_count++;
+    }
+    (*pc)++;
+    return 0;
+}
+
+__device__ int32_t device_handler_str_len(
+    const Instruction* instr,
+    DeviceVMState* state,
+    int32_t* shared_memory,
+    uint32_t* pc,
+    int32_t* global_memory,
+    size_t memory_size,
+    size_t program_size
+) {
+    (void)shared_memory; (void)program_size;
+    uint32_t op = instr->operand;
+    int32_t reg_idx_dst = EXTRACT_REG_DST(op);
+    int32_t reg_idx_src = EXTRACT_REG_SRC1(op);  
+    if (DEVICE_VALIDATE_REG_PAIR(reg_idx_dst, reg_idx_src)) {
+        uint32_t byte_offset = (uint32_t)state->registers[reg_idx_src];
+        size_t max_bytes = memory_size * sizeof(int32_t);
+        
+        if (byte_offset < max_bytes) {
+            const uint8_t* mem_bytes = (const uint8_t*)global_memory;
+            const uint8_t* str_ptr = &mem_bytes[byte_offset];
+            
+            int32_t len = 0;
+            while (byte_offset + len < max_bytes && str_ptr[len] != 0) {
+                len++;
+            }
+            
+            state->registers[reg_idx_dst] = len;
+            device_update_flags(state, len);
+            state->memory_access_count++;
+        }
+    }
+    (*pc)++;
+    return 0;
+}
+
+__device__ int32_t device_handler_str_cmp(
+    const Instruction* instr,
+    DeviceVMState* state,
+    int32_t* shared_memory,
+    uint32_t* pc,
+    int32_t* global_memory,
+    size_t memory_size,
+    size_t program_size
+) {
+    (void)shared_memory; (void)program_size;
+    uint32_t op = instr->operand;
+    int32_t reg_idx_dst = EXTRACT_REG_DST(op);
+    int32_t reg_idx_src1 = EXTRACT_REG_SRC1(op);  
+    int32_t reg_idx_src2 = EXTRACT_REG_SRC2(op);  
+    if (DEVICE_VALIDATE_REG_TRIPLE(reg_idx_dst, reg_idx_src1, reg_idx_src2)) {
+        uint32_t offset1 = (uint32_t)state->registers[reg_idx_src1];
+        uint32_t offset2 = (uint32_t)state->registers[reg_idx_src2];
+        size_t max_bytes = memory_size * sizeof(int32_t);
+        
+        if (offset1 < max_bytes && offset2 < max_bytes) {
+            const uint8_t* mem_bytes = (const uint8_t*)global_memory;
+            const uint8_t* str1 = &mem_bytes[offset1];
+            const uint8_t* str2 = &mem_bytes[offset2];
+            int32_t result = 0;
+            uint32_t i = 0;
+            
+            while (offset1 + i < max_bytes && offset2 + i < max_bytes) {
+                uint8_t c1 = str1[i];
+                uint8_t c2 = str2[i];
+                
+                if (c1 != c2) {
+                    result = (c1 < c2) ? -1 : 1;
+                    break;
+                }
+                
+                if (c1 == 0) {
+                    result = 0;  
+                    break;
+                }
+                
+                i++;
+            }
+            
+            if (result == 0 && (offset1 + i >= max_bytes || offset2 + i >= max_bytes)) {
+                if (offset1 + i >= max_bytes && offset2 + i >= max_bytes) {
+                    result = 0;  
+                } else if (offset1 + i >= max_bytes) {
+                    if (offset2 + i < max_bytes && str2[i] == 0) {
+                        result = 0;  
+                    } else {
+                        result = -1; 
+                    }
+                } else {
+                    if (offset1 + i < max_bytes && str1[i] == 0) {
+                        result = 0;  
+                    } else {
+                        result = 1;  
+                    }
+                }
+            }
+            
+            state->registers[reg_idx_dst] = result;
+            device_update_flags(state, result);
+            state->memory_access_count += 2;
+        }
+    }
+    (*pc)++;
+    return 0;
+}
+
+__device__ int32_t device_handler_str_copy(
+    const Instruction* instr,
+    DeviceVMState* state,
+    int32_t* shared_memory,
+    uint32_t* pc,
+    int32_t* global_memory,
+    size_t memory_size,
+    size_t program_size
+) {
+    (void)shared_memory; (void)program_size;
+    uint32_t op = instr->operand;
+    int32_t reg_idx_dst = EXTRACT_REG_DST(op);  
+    int32_t reg_idx_src = EXTRACT_REG_SRC1(op);  
+    if (DEVICE_VALIDATE_REG_PAIR(reg_idx_dst, reg_idx_src)) {
+        uint32_t dst_offset = (uint32_t)state->registers[reg_idx_dst];
+        uint32_t src_offset = (uint32_t)state->registers[reg_idx_src];
+        size_t max_bytes = memory_size * sizeof(int32_t);
+        
+        if (dst_offset < max_bytes && src_offset < max_bytes && dst_offset != src_offset) {
+            uint8_t* mem_bytes = (uint8_t*)global_memory;
+            const uint8_t* src = &mem_bytes[src_offset];
+            uint8_t* dst = &mem_bytes[dst_offset];
+            
+            uint32_t i = 0;
+            while (src_offset + i < max_bytes && dst_offset + i < max_bytes) {
+                uint8_t byte = src[i];
+                dst[i] = byte;
+                
+                if (byte == 0) {
+                    break;
+                }
+                
+                i++;
+            }
+            
+            if (dst_offset + i < max_bytes && src_offset + i < max_bytes && src[i] != 0) {
+                dst[i] = 0;
+            }
+            
+            state->memory_access_count += 2;
+        }
+    }
+    (*pc)++;
+    return 0;
+}
+
 __device__ int32_t device_handler_halt(
     const Instruction* instr,
     DeviceVMState* state,

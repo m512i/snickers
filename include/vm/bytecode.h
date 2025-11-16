@@ -69,6 +69,11 @@ typedef enum {
     
     OP_PREFETCH,   
     
+    OP_LOAD_STRING_PTR,
+    OP_STR_LEN,
+    OP_STR_CMP,
+    OP_STR_COPY,
+    
     OP_HALT,
     OP_BREAKPOINT, 
     OP_MAX_OPCODE
