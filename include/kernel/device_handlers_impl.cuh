@@ -1212,6 +1212,241 @@ __device__ int32_t device_handler_str_copy(
     return 0;
 }
 
+#define HEAP_ALIGNMENT 8
+#define HEAP_HEADER_SIZE 2  
+#define HEAP_FREE_LIST_HEAD 0  
+#define HEAP_MIN_BLOCK_SIZE (HEAP_HEADER_SIZE + 1)
+#define HEAP_START_OFFSET(mem_size) ((mem_size) * 3 / 4)
+#define HEAP_SIZE(mem_size) ((mem_size) / 4)
+
+
+__device__ inline uint32_t heap_get_block_size(int32_t* heap_base, uint32_t block_idx) {
+    return (uint32_t)heap_base[block_idx];
+}
+
+__device__ inline void heap_set_block_size(int32_t* heap_base, uint32_t block_idx, uint32_t size) {
+    heap_base[block_idx] = (int32_t)size;
+}
+
+__device__ inline int32_t heap_get_next_free(int32_t* heap_base, uint32_t block_idx) {
+    return heap_base[block_idx + 1];
+}
+
+__device__ inline void heap_set_next_free(int32_t* heap_base, uint32_t block_idx, int32_t next) {
+    heap_base[block_idx + 1] = next;
+}
+
+__device__ int32_t device_handler_malloc(
+    const Instruction* instr,
+    DeviceVMState* state,
+    int32_t* shared_memory,
+    uint32_t* pc,
+    int32_t* global_memory,
+    size_t memory_size,
+    size_t program_size
+) {
+    (void)shared_memory; (void)program_size;
+    uint32_t op = instr->operand;
+    int32_t reg_idx_dst = EXTRACT_REG_DST(op);  
+    int32_t reg_idx_size = EXTRACT_REG_SRC1(op); 
+    
+    if (!DEVICE_VALIDATE_REG_PAIR(reg_idx_dst, reg_idx_size)) {
+        (*pc)++;
+        return 0;
+    }
+    
+    uint32_t size_bytes = (uint32_t)state->registers[reg_idx_size];
+    if (size_bytes == 0) {
+        state->registers[reg_idx_dst] = 0;
+        (*pc)++;
+        return 0;
+    }
+    
+    uint32_t heap_start = HEAP_START_OFFSET(memory_size);
+    uint32_t heap_size = HEAP_SIZE(memory_size);
+    int32_t* heap_base = &global_memory[heap_start];
+    
+    if (heap_size < HEAP_MIN_BLOCK_SIZE) {
+        state->registers[reg_idx_dst] = 0;  
+        (*pc)++;
+        return 0;
+    }
+    
+    uint32_t size_units = (size_bytes + sizeof(int32_t) - 1) / sizeof(int32_t);
+    uint32_t block_size = size_units + HEAP_HEADER_SIZE; 
+    
+    if (block_size > heap_size - HEAP_HEADER_SIZE) {
+        state->registers[reg_idx_dst] = 0;  
+        (*pc)++;
+        return 0;
+    }
+    
+    uint32_t alloc_start = HEAP_HEADER_SIZE + 1;
+    int32_t* alloc_ptr = &heap_base[HEAP_FREE_LIST_HEAD];
+    atomicCAS((int*)alloc_ptr, 0, (int)alloc_start);
+    uint32_t alloc_idx = (uint32_t)atomicAdd((int*)alloc_ptr, (int)block_size);
+    
+    if (alloc_idx == 0) {
+        alloc_idx = alloc_start;
+    } else if (alloc_idx < alloc_start) {
+        alloc_idx = alloc_start;
+    }
+    
+    if (alloc_idx + block_size > heap_size) {
+        atomicSub((int*)alloc_ptr, (int)block_size);
+        state->registers[reg_idx_dst] = 0;
+        (*pc)++;
+        return 0;
+    }
+    
+    heap_set_block_size(heap_base, alloc_idx, block_size);
+    heap_set_next_free(heap_base, alloc_idx, -1);
+    uint32_t data_offset = heap_start + alloc_idx + HEAP_HEADER_SIZE;
+    state->registers[reg_idx_dst] = (int32_t)(data_offset * sizeof(int32_t));  
+    state->memory_access_count++;
+    (*pc)++;
+    return 0;
+}
+
+__device__ int32_t device_handler_free(
+    const Instruction* instr,
+    DeviceVMState* state,
+    int32_t* shared_memory,
+    uint32_t* pc,
+    int32_t* global_memory,
+    size_t memory_size,
+    size_t program_size
+) {
+    (void)shared_memory; (void)program_size;
+    uint32_t op = instr->operand;
+    int32_t reg_idx_ptr = EXTRACT_REG_DST(op);
+    
+    if (!DEVICE_VALIDATE_REG(reg_idx_ptr)) {
+        (*pc)++;
+        return 0;
+    }
+    
+    uint32_t ptr_bytes = (uint32_t)state->registers[reg_idx_ptr];
+    if (ptr_bytes == 0) {
+        (*pc)++;
+        return 0;
+    }
+    
+    uint32_t ptr_idx = ptr_bytes / sizeof(int32_t);
+    uint32_t heap_start = HEAP_START_OFFSET(memory_size);
+    uint32_t heap_size = HEAP_SIZE(memory_size);
+    int32_t* heap_base = &global_memory[heap_start];
+    
+    if (ptr_idx < heap_start || ptr_idx >= heap_start + heap_size) {
+        (*pc)++;
+        return 0;
+    }
+    
+    uint32_t data_idx = ptr_idx - heap_start;
+    if (data_idx < HEAP_HEADER_SIZE) {
+        (*pc)++;
+        return 0;
+    }
+    
+    uint32_t block_idx = data_idx - HEAP_HEADER_SIZE;
+    
+    if (block_idx >= heap_size) {
+        (*pc)++;
+        return 0;
+    }
+    
+    uint32_t block_size = heap_get_block_size(heap_base, block_idx);
+    heap_set_next_free(heap_base, block_idx, 0);  
+    
+    state->memory_access_count++;
+    (*pc)++;
+    return 0;
+}
+
+#define PRINT_BUFFER_START(mem_size) ((mem_size) * 2 / 3)  
+#define PRINT_BUFFER_SIZE(mem_size) ((mem_size) / 12)  
+#define PRINT_TYPE_INT 0
+#define PRINT_TYPE_STR 1
+
+__device__ int32_t device_handler_print(
+    const Instruction* instr,
+    DeviceVMState* state,
+    int32_t* shared_memory,
+    uint32_t* pc,
+    int32_t* global_memory,
+    size_t memory_size,
+    size_t program_size
+) {
+    (void)shared_memory; (void)program_size;
+    
+    int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
+    if (thread_id != 0) {
+        (*pc)++;
+        return 0;
+    }
+    
+    uint32_t op = instr->operand;
+    int32_t reg_idx_type = EXTRACT_REG_DST(op);  
+    int32_t reg_idx_value = EXTRACT_REG_SRC1(op);  
+    
+    if (!DEVICE_VALIDATE_REG_PAIR(reg_idx_type, reg_idx_value)) {
+        (*pc)++;
+        return 0;
+    }
+    
+    uint32_t print_type = (uint32_t)state->registers[reg_idx_type];
+    uint32_t print_buffer_start = PRINT_BUFFER_START(memory_size);
+    uint32_t print_buffer_size = PRINT_BUFFER_SIZE(memory_size);
+    
+    if (print_buffer_size < 3) {
+        (*pc)++;
+        return 0;
+    }
+
+    int32_t* slot_counter = &global_memory[print_buffer_start];
+    atomicCAS((int*)slot_counter, 0, 3);
+    uint32_t reserved_idx = (uint32_t)atomicAdd((int*)slot_counter, 3);
+    
+    if (reserved_idx == 0 || reserved_idx < 3) {
+        reserved_idx = 3;
+    }
+    
+    if (reserved_idx + 3 > print_buffer_size) {
+        atomicSub((int*)slot_counter, 3);
+        (*pc)++;
+        return 0;
+    }
+    
+    uint32_t slot_idx = reserved_idx;
+    
+    if (print_type == PRINT_TYPE_INT) {
+        global_memory[print_buffer_start + slot_idx] = PRINT_TYPE_INT;
+        global_memory[print_buffer_start + slot_idx + 1] = state->registers[reg_idx_value];
+        global_memory[print_buffer_start + slot_idx + 2] = 0; 
+    } else if (print_type == PRINT_TYPE_STR) {
+        uint32_t str_offset_bytes = (uint32_t)state->registers[reg_idx_value];
+        uint32_t str_offset = str_offset_bytes / sizeof(int32_t);
+        
+        if (str_offset < memory_size) {
+            uint32_t len = 0;
+            const uint8_t* str_bytes = (const uint8_t*)global_memory;
+            size_t max_bytes = memory_size * sizeof(int32_t);
+            
+            while (str_offset_bytes + len < max_bytes && str_bytes[str_offset_bytes + len] != 0) {
+                len++;
+            }
+            
+            global_memory[print_buffer_start + slot_idx] = PRINT_TYPE_STR;
+            global_memory[print_buffer_start + slot_idx + 1] = (int32_t)str_offset_bytes;
+            global_memory[print_buffer_start + slot_idx + 2] = (int32_t)len;
+        }
+    }
+    
+    state->memory_access_count++;
+    (*pc)++;
+    return 0;
+}
+
 __device__ int32_t device_handler_halt(
     const Instruction* instr,
     DeviceVMState* state,

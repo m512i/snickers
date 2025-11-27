@@ -3,7 +3,7 @@
 
 #include <cuda_runtime.h>
 #include <stdint.h>
-#include "../include/vm/bytecode.h"
+#include "vm/bytecode.h"
 
 #define DEVICE_MAX_REGISTERS 32
 #define DEVICE_STACK_SIZE 256
@@ -102,6 +102,9 @@ __device__ int32_t device_execute_instruction(
         case OP_STR_LEN: handler = device_handler_str_len; break;
         case OP_STR_CMP: handler = device_handler_str_cmp; break;
         case OP_STR_COPY: handler = device_handler_str_copy; break;
+        case OP_MALLOC: handler = device_handler_malloc; break;
+        case OP_FREE: handler = device_handler_free; break;
+        case OP_PRINT: handler = device_handler_print; break;
         case OP_HALT: handler = device_handler_halt; break;
         case OP_BREAKPOINT: handler = device_handler_breakpoint; break;
         default:
@@ -133,3 +136,4 @@ __device__ int32_t device_execute_instruction(
 }
 
 #endif
+

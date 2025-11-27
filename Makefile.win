@@ -15,7 +15,7 @@ CFLAGS_CUDA = /W3 /std:c11 /Zi /FS /I$(INCLUDEDIR) /I$(CUDA_INC) /EHsc /c
 LDFLAGS = cudart.lib
 
 SRCDIR = src
-KERNELDIR = kernels
+KERNELDIR = $(SRCDIR)\kernel
 BUILDDIR = build
 INCLUDEDIR = include
 
@@ -31,7 +31,7 @@ C_OBJECTS = build\vm\bytecode.obj \
 MAIN_OBJECT = 
 GPU_C_OBJECTS = build\gpu\gpu_memory.obj
 
-CUDA_OBJECTS = build\kernels\vm_kernel.obj \
+CUDA_OBJECTS = build\kernel\vm_kernel.obj \
                build\gpu\gpu_vm.obj \
                build\main.obj
 
@@ -49,7 +49,7 @@ $(BUILDDIR):
 	@if not exist $(BUILDDIR)\vm mkdir $(BUILDDIR)\vm
 	@if not exist $(BUILDDIR)\gpu mkdir $(BUILDDIR)\gpu
 	@if not exist $(BUILDDIR)\utils mkdir $(BUILDDIR)\utils
-	@if not exist $(BUILDDIR)\kernels mkdir $(BUILDDIR)\kernels
+	@if not exist $(BUILDDIR)\kernel mkdir $(BUILDDIR)\kernel
 	@if not exist $(BUILDDIR)\tests mkdir $(BUILDDIR)\tests
 
 $(TARGET): $(OBJECTS)
@@ -91,8 +91,8 @@ build\gpu\gpu_memory.obj: $(SRCDIR)\gpu\gpu_memory.c
 	@if not exist build\gpu mkdir build\gpu
 	$(CC) $(CFLAGS_CUDA) $** /Fo$@
 
-build\kernels\vm_kernel.obj: $(KERNELDIR)\vm_kernel.cu
-	@if not exist build\kernels mkdir build\kernels
+build\kernel\vm_kernel.obj: $(SRCDIR)\kernel\vm_kernel.cu
+	@if not exist build\kernel mkdir build\kernel
 	$(NVCC) $(NVCCFLAGS) -c $** -o $@ -I$(INCLUDEDIR)
 
 build\gpu\gpu_vm.obj: $(SRCDIR)\gpu\gpu_vm.c

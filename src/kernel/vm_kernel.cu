@@ -1,9 +1,9 @@
 #include <cuda_runtime.h>
 #include <stdint.h>
 #include <string.h>
-#include "../include/vm/bytecode.h"
-#include "device_instructions.cuh"
-#include "device_handlers_impl.cuh"
+#include "vm/bytecode.h"
+#include "kernel/device_instructions.cuh"
+#include "kernel/device_handlers_impl.cuh"
 
 #define MAX_CONSTANT_PROGRAM_SIZE 8192 
 

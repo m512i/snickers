@@ -3,8 +3,8 @@
 
 #include <cuda_runtime.h>
 #include <stdint.h>
-#include "../include/vm/bytecode.h"
-#include "../include/vm/operand_helpers.h"
+#include "vm/bytecode.h"
+#include "vm/operand_helpers.h"
 
 
 #ifndef DEVICE_MAX_REGISTERS
@@ -626,6 +626,36 @@ __device__ int32_t device_handler_halt(
 );
 
 __device__ int32_t device_handler_breakpoint(
+    const Instruction* instr,
+    DeviceVMState* state,
+    int32_t* shared_memory,
+    uint32_t* pc,
+    int32_t* global_memory,
+    size_t memory_size,
+    size_t program_size
+);
+
+__device__ int32_t device_handler_malloc(
+    const Instruction* instr,
+    DeviceVMState* state,
+    int32_t* shared_memory,
+    uint32_t* pc,
+    int32_t* global_memory,
+    size_t memory_size,
+    size_t program_size
+);
+
+__device__ int32_t device_handler_free(
+    const Instruction* instr,
+    DeviceVMState* state,
+    int32_t* shared_memory,
+    uint32_t* pc,
+    int32_t* global_memory,
+    size_t memory_size,
+    size_t program_size
+);
+
+__device__ int32_t device_handler_print(
     const Instruction* instr,
     DeviceVMState* state,
     int32_t* shared_memory,

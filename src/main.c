@@ -260,6 +260,58 @@ int main(int argc, char** argv) {
         }
     }
     
+    size_t print_buffer_start = (memory_size * 2) / 3;
+    size_t print_buffer_size = memory_size / 12;
+    int print_output_found = 0;
+    
+    LOG_COLOR(COLOR_RESET, "\n");
+    LOG_COLOR(COLOR_HEADER, "Print Output:\n");
+    
+    int32_t counter_value = memory[print_buffer_start];
+    
+    if (counter_value > 3) {
+        for (size_t i = 3; i < (size_t)counter_value && i < print_buffer_size - 2; i += 3) {
+            size_t slot_idx = print_buffer_start + i;
+            if (slot_idx + 2 >= memory_size) break;
+            
+            int32_t print_type = memory[slot_idx];
+            int32_t value = memory[slot_idx + 1];
+            int32_t length = memory[slot_idx + 2];
+            
+            print_output_found = 1;
+            
+            if (print_type == 0) {
+                LOG_COLOR(COLOR_VALUE, "%d", value);
+            } else if (print_type == 1) {
+                uint32_t str_offset_bytes = (uint32_t)value;
+                uint32_t str_idx = str_offset_bytes / sizeof(int32_t);
+                uint32_t str_len = (uint32_t)length;
+                
+                if (str_idx < memory_size && str_len > 0) {
+                    const uint8_t* mem_bytes = (const uint8_t*)memory;
+                    size_t max_bytes = memory_size * sizeof(int32_t);
+                    
+                    if (str_offset_bytes < max_bytes) {
+                        const char* str = (const char*)&mem_bytes[str_offset_bytes];
+                        size_t print_len = str_len;
+                        if (str_offset_bytes + print_len > max_bytes) {
+                            print_len = max_bytes - str_offset_bytes;
+                        }
+                        for (size_t j = 0; j < print_len && str[j] != 0; j++) {
+                            LOG_COLOR(COLOR_VALUE, "%c", str[j]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if (print_output_found) {
+        LOG_COLOR(COLOR_RESET, "\n");
+    } else {
+        LOG_COLOR(COLOR_METADATA, "  (no print output)\n");
+    }
+    
     free(registers);
     free(memory);
     bytecode_destroy(program);

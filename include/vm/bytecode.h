@@ -74,6 +74,10 @@ typedef enum {
     OP_STR_CMP,
     OP_STR_COPY,
     
+    OP_MALLOC,
+    OP_FREE,
+    OP_PRINT,
+    
     OP_HALT,
     OP_BREAKPOINT, 
     OP_MAX_OPCODE

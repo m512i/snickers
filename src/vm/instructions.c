@@ -18,6 +18,7 @@ const char* instruction_get_name(OpCode opcode) {
         "VLOAD2", "VLOAD4", "VSTORE2", "VSTORE4",
         "PREFETCH",
         "LOAD_STRING_PTR", "STR_LEN", "STR_CMP", "STR_COPY",
+        "MALLOC", "FREE", "PRINT",
         "HALT", "BREAKPOINT"
     };
     
@@ -68,6 +69,9 @@ int instruction_get_operand_count(OpCode opcode) {
         case OP_STR_LEN:
         case OP_STR_CMP:
         case OP_STR_COPY:
+        case OP_MALLOC:
+        case OP_FREE:
+        case OP_PRINT:
             return 1;  
         
         default:
@@ -193,6 +197,101 @@ int instruction_execute_host(
             }
             (*pc)++;
             break;
+        
+        case OP_MALLOC: {
+            int32_t reg_dst = (op >> 16) & 0xFF;
+            int32_t reg_size = (op >> 8) & 0xFF;
+            
+            if (reg_dst < VM_MAX_REGISTERS && reg_size < VM_MAX_REGISTERS) {
+                uint32_t size_bytes = (uint32_t)registers[reg_size];
+                size_t heap_start_idx = (memory_size * 3) / 4;
+                size_t heap_size_units = memory_size / 4;
+                
+                uint32_t block_size = (size_bytes + sizeof(int32_t) - 1) / sizeof(int32_t) + 2; 
+                uint32_t found = 0;
+                
+                if (heap_size_units >= (size_t)block_size + 1) {
+                    uint32_t free_head = (uint32_t)memory[heap_start_idx];
+                    uint32_t curr = (free_head > 0 && free_head < (uint32_t)heap_size_units) ? free_head : 1;
+                    
+                    while ((size_t)curr + (size_t)block_size < heap_size_units) {
+                        int32_t mem_val = memory[heap_start_idx + curr];
+                        uint32_t mem_val_u = (uint32_t)(mem_val >= 0 ? mem_val : 0);
+                        if (mem_val == 0 || mem_val_u >= block_size) {
+                            memory[heap_start_idx + curr] = (int32_t)block_size;
+                            memory[heap_start_idx + curr + 1] = -1; 
+                            registers[reg_dst] = (int32_t)((heap_start_idx + curr + 2) * sizeof(int32_t));
+                            found = 1;
+                            break;
+                        }
+                        int32_t next_ptr = memory[heap_start_idx + curr + 1];
+                        if (next_ptr >= 0 && (uint32_t)next_ptr < (uint32_t)heap_size_units) {
+                            curr = (uint32_t)next_ptr;
+                        } else {
+                            curr += block_size;
+                        }
+                    }
+                }
+                
+                if (!found) {
+                    registers[reg_dst] = 0;
+                }
+            }
+            (*pc)++;
+            break;
+        }
+        
+        case OP_FREE: {
+            int32_t reg_ptr = (op >> 16) & 0xFF;
+            
+            if (reg_ptr < VM_MAX_REGISTERS) {
+                uint32_t ptr_bytes = (uint32_t)registers[reg_ptr];
+                if (ptr_bytes != 0) {
+                    size_t ptr_idx = ptr_bytes / sizeof(int32_t);
+                    size_t heap_start_idx = (memory_size * 3) / 4;
+                    size_t heap_size_units = memory_size / 4;
+                    
+                    if (ptr_idx > heap_start_idx + 2 && ptr_idx < heap_start_idx + heap_size_units) {
+                        size_t block_idx = ptr_idx - heap_start_idx - 2;
+                        if (block_idx < heap_size_units) {
+                            int32_t old_head = memory[heap_start_idx];
+                            memory[heap_start_idx] = (int32_t)block_idx;
+                            memory[heap_start_idx + block_idx + 1] = old_head;
+                        }
+                    }
+                }
+            }
+            (*pc)++;
+            break;
+        }
+        
+        case OP_PRINT: {
+            int32_t reg_type = (op >> 16) & 0xFF;
+            int32_t reg_value = (op >> 8) & 0xFF;
+            
+            if (reg_type < VM_MAX_REGISTERS && reg_value < VM_MAX_REGISTERS) {
+                uint32_t print_type = (uint32_t)registers[reg_type];
+                
+                if (print_type == 0) {
+                    printf("%d", registers[reg_value]);
+                } else if (print_type == 1) {
+                    uint32_t str_offset = (uint32_t)registers[reg_value];
+                    uint32_t str_idx = str_offset / sizeof(int32_t);
+                    
+                    if (str_idx < memory_size) {
+                        const uint8_t* str_bytes = (const uint8_t*)memory;
+                        size_t max_bytes = memory_size * sizeof(int32_t);
+                        
+                        if (str_offset < max_bytes) {
+                            const char* str = (const char*)&str_bytes[str_offset];
+                            printf("%s", str);
+                        }
+                    }
+                }
+            }
+            (*pc)++;
+            break;
+        }
         
         case OP_HALT:
             return 1;  
